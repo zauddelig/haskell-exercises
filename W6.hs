@@ -69,19 +69,23 @@ readNames s =
 -- (NB! There are obviously other corner cases like the inputs " " and
 -- "a b c", but you don't need to worry about those here)
 split :: String -> Maybe (String,String)
-split s = undefined
-
+split s = case break (==' ') s of
+               (a, ' ':b) -> Just (a,b)
+               _ -> Nothing
 -- checkNumber should take a pair of two strings and return then
 -- unchanged if they don't contain numbers. Otherwise Nothing is
 -- returned.
 checkNumber :: (String, String) -> Maybe (String, String)
-checkNumber (for,sur) = undefined
+checkNumber (for,sur) = if or $ map containNumber [for, sur] then Nothing else Just (for, sur)
+    where
+        isNumber c = or $ map (==c) "1234567890"
+        containNumber s = or $ map isNumber s
 
 -- checkCapitals should take a pair of two strings and return them
 -- unchanged if both start with a capital letter. Otherwise Nothing is
 -- returned.
 checkCapitals :: (String, String) -> Maybe (String, String)
-checkCapitals (for,sur) = undefined
+checkCapitals (f:for,s:sur) = if and $ map isUpper [f, s] then Just (f:for, s:sur) else Nothing
 
 -- Ex 2: implement a function myTake that works just like take, but
 --   1. the arguments are of types Maybe Int and Maybe [a]
@@ -103,7 +107,18 @@ checkCapitals (for,sur) = undefined
 --    ==> Nothing
 
 myTake :: Maybe Int -> Maybe [a] -> Maybe [a]
-myTake mi ml = undefined
+myTake Nothing _ = Nothing
+myTake _ Nothing = Nothing
+{-
+myTake (Just n) (Just xs)
+    | n > length xs  = Nothing
+    | otherwise = Just $ take n xs-}
+
+myTake a b = do
+    n  <- a
+    xs <- b
+    when (n > length xs)  Nothing
+    return (take n xs)
 
 -- Ex 3: given a list of indices and a list of values, return the sum
 -- of the values in the given indices. You should fail if any of the
@@ -122,7 +137,18 @@ myTake mi ml = undefined
 --    Nothing
 
 selectSum :: Num a => [a] -> [Int] -> Maybe a
-selectSum xs is = undefined
+selectSum _ [] = Just 0
+selectSum [] _ = Nothing
+selectSum (xs) (i:is) = do
+    when (i<0) Nothing
+    when (i>=length xs) Nothing
+    next <- selectSum xs is
+    let n = selectSum' xs i
+    return $ n + next
+
+selectSum' [] _ = 0
+selectSum' (x:_) 0 = x
+selectSum' (_:xs) i = selectSum' (xs) (i-1)
 
 -- Ex 4: below you'll find the implementation of a Logger monad and
 -- some examples of its use.

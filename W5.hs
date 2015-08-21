@@ -243,12 +243,16 @@ data Result a = MkResult a | NoResult | Failure String
   deriving (Show,Eq)
 
 instance Functor Result where
-  fmap f result = error "implement me"
+    fmap _ NoResult = NoResult
+    fmap f (Failure s) = Failure s
+    fmap f (MkResult a) = MkResult $ f a
 
 -- Ex 15: Implement the instance Functor List (for the datatype List
 -- from ex 11)
 
 instance Functor List where
+    fmap _ Empty = Empty
+    fmap f (LNode a l) = LNode (f a) (fmap f l) 
 
 -- Ex 16: Fun a is a type that wraps a function Int -> a. Implement a
 -- Functor instance for it.
@@ -262,6 +266,7 @@ runFun :: Fun a -> Int -> a
 runFun (Fun f) x = f x
 
 instance Functor Fun where
+    fmap g (Fun f) =  Fun (g . f)
 
 -- Ex 17: this and the next exercise serve as an introduction for the
 -- next week.
@@ -291,8 +296,18 @@ instance Functor Fun where
 --  *W5> threeRandom (mkStdGen 2) :: (Bool,Bool,Bool)
 --  (True,True,False)
 
+
+-- Note that Random is in fact not Monadic
+
+-- We will have to do impure code when calling newStdGen which probably reads uRandom
 threeRandom :: (Random a, RandomGen g) => g -> (a,a,a)
-threeRandom g = undefined
+threeRandom generator = (val1, val2, val3)
+    where
+        (val1, g1) = random generator
+        (val2, g2) = random g1
+        (val3, g3) = random g2
+
+
 
 -- Ex 18: given a Tree (same type as on Week 3), randomize the
 -- contents of the tree.
@@ -316,4 +331,10 @@ data Tree a = Leaf | Node a (Tree a) (Tree a)
   deriving Show
 
 randomizeTree :: (Random a, RandomGen g) => Tree b -> g -> (Tree a,g)
-randomizeTree t g = undefined
+randomizeTree Leaf g = (Leaf, g)
+randomizeTree (Node a l r) g = (Node aRandom lRandom rRandom, lastGen)
+    where
+        (aRandom, tempGen) = random g
+        (lRandom, newGen) = randomizeTree l tempGen
+        (rRandom, lastGen) = randomizeTree r newGen
+        
