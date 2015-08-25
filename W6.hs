@@ -167,25 +167,27 @@ selectSum' (_:xs) i = selectSum' (xs) (i-1)
 --   binom 0 0 ==> Logger ["B(0,0)"] 1
 --   binom 0 7 ==> Logger ["B(0,7)"] 0
 --   binom 1 1 ==> Logger ["B(0,0)","B(0,1)","B(1,1)"] 1
---   binom 2 2 ==> Logger ["B(0,0)","B(0,1)","B(1,1)","B(0,1)","B(0,2)","B(1,2)","B(2,2)"] 1
+--   binom 2 2 ==> Logger ["B(0,0)","B(0,1)","B(1,1)","B(0,1)","B(0,2)","B(1,2)","B(2,2)"] 1 -- ? should it not be 3?
 
 data Logger a = Logger [String] a
   deriving Show
 
 instance Monad Logger where
   return x = Logger [] x
+  -- f :: a -> Logger ()
   Logger la a >>= f = Logger (la++lb) b
     where Logger lb b = f a
 
 msg :: String -> Logger ()
 msg s = Logger [s] ()
 
+
 -- An example
 multiplyLog :: Int -> Int -> Logger Int
 multiplyLog a b = do
   msg ("first arg is " ++ show a)
   msg ("second arg is " ++ show b)
-  let ret = a + b
+  let ret = a * b
   msg ("returning product " ++ show ret)
   return ret
 
@@ -204,8 +206,17 @@ productLog (x:xs) = do
 
 -- Implement this:
 binom :: Integer -> Integer -> Logger Integer
-binom n k = undefined
-
+binom n 0 = do
+   msg ("B("++(show n)++",0)")>> return 1
+binom 0 k = do
+      msg ("B(0,"++(show k)++")") >> return 0
+binom n k = do
+    a <- binom (n-1) (k-1) 
+    b <- binom (n-1) k
+    let c = a+b
+    msg ("B("++(show n)++","++(show k)++")")
+    return $ c
+    
 -- Ex 5: using the State monad, write the operation update that first
 -- multiplies the state by 2 and then adds one to it. The state has
 -- type Int.
@@ -215,7 +226,10 @@ binom n k = undefined
 --    ==> ((),7)
 
 update :: State Int ()
-update = undefined
+update = do
+    -- we enter in a contest
+    a <- get
+    put (a*2 + 1)
 
 -- Ex 6: using the State monad, walk through a list and increment the
 -- state by one each time a given element is encountered. Additionally
@@ -228,9 +242,24 @@ update = undefined
 --  runState (lengthAndCount True [False,True,False,True,False]) 0
 --    ==> (5,2)
 
-lengthAndCount :: Eq a => a -> [a] -> State Int Int
-lengthAndCount x ys = undefined
 
+-- This is a little hackish IMHO we play with the state as it is a var --
+lengthAndCount :: Eq a => a -> [a] -> State Int Int
+lengthAndCount x [] = return 0
+
+lengthAndCount x (y:ys) = do
+    l <- lengthAndCount x ys
+    when (x==y) (modify(+1))
+    return $ l+1
+
+-- lengthAndCount x (y:ys) = do
+--     lengthAndCount x ys
+--     (a,b) <- get
+--     let (c,d) = if x==y then (a+1, b+1) else (a, b+1)
+--     put (c,d)
+--     return c
+--     
+             
 -- Ex 7: using a state of type [(a,Int)] we can keep track of the
 -- numbers of occurrences of elements of type a. For instance
 -- [('a',1),('x',3)] means that we've seen one 'a' and three 'x's.
@@ -248,8 +277,15 @@ lengthAndCount x ys = undefined
 --
 -- PS. Order of the list of pairs doesn't matter
 
+-- with freqs from Week 5 it is very easy
 count :: Eq a => a -> State [(a,Int)] ()
-count x = return ()
+count x = modify (helper)
+    -- helper :: s -> s pretty strange Indeed
+    where helper [] = [(x, 1)]
+          helper ((y, n):ys)
+              | y == x = ((y, n+1):ys)
+              | otherwise = (y, n):helper ys
+      
 
 -- Ex 8: given a list of values, replace each value by a number saying
 -- which occurrence of the value this was in the list.
@@ -266,8 +302,13 @@ count x = return ()
 --    ==> ([1,2,1,2,3,3,1],[(5,3),(6,3),(7,1)])
 
 occurrences :: (Eq a) => [a] -> State [(a,Int)] [Int]
-occurrences xs = undefined
-
+occurrences [] = return []
+occurrences (x:xs) = do
+    count x -- modify the state
+    c <- get -- get the new state, i.e. [('a',2),('b',3)]
+    let Just n = lookup x c
+    rest <- occurrences xs
+    return $ n:rest
 -- Ex 9: implement the function ifM, that takes three monadic
 -- operations. If the first of the operations returns True, the second
 -- operation should be run. Otherwise the third operation should be
@@ -285,7 +326,9 @@ test = do
   return (x<10)
 
 ifM :: Monad m => m Bool -> m a -> m a -> m a
-ifM opBool opThen opElse = undefined
+ifM opBool opThen opElse = do
+    isTrue <- opBool
+    if isTrue then opThen else opElse
 
 -- Ex 10: the standard library function Control.Monad.mapM defines a
 -- monadic map operation. Some examples of using it (safeDiv is define
@@ -310,7 +353,13 @@ safeDiv x 0.0 = Nothing
 safeDiv x y = Just (x/y)
 
 mapM2 :: Monad m => (a -> b -> m c) -> [a] -> [b] -> m [c]
-mapM2 op xs ys = undefined
+mapM2 _ _ [] = return []
+mapM2 _ [] _ = return []
+mapM2 op (x:xs) (y:ys) = do
+    rest <- mapM2 op xs ys
+    comp <- op x y
+    return $ comp:rest
+    
 
 -- Ex 11: Funnykiztan has cities that are named with by 0..n-1. Some
 -- cities are connected by roads. Your task is to find out if you can
@@ -382,7 +431,13 @@ routeExists :: [[Int]] -> Int -> Int -> Bool
 routeExists cities i j = j `elem` execState (dfs cities i) []
 
 dfs :: [[Int]] -> Int -> State [Int] ()
-dfs cities i = undefined
+dfs cities i = do
+    state <- get
+    when (not $ elem i state) (do
+            put (i:state)
+            let connected = cities !! i
+            mapM_ (dfs cities) connected
+            )
 
 -- Ex 12: define the function orderedPairs that returns all pairs
 -- (i,j) such that i<j and i occurs in the given list before j.
@@ -396,7 +451,17 @@ dfs cities i = undefined
 -- PS. once again the tests don't care about the order of results
 
 orderedPairs :: [Int] -> [(Int,Int)]
-orderedPairs xs = undefined
+orderedPairs [] = []
+orderedPairs [x] = []
+orderedPairs (x:xs) = orderedPairs' x xs xs
+
+orderedPairs' _ [] [] = return []
+orderedPairs' _ [] (z:zs) = do orderedPairs' z (zs) zs 
+orderedPairs' x (y:ys) zs = do
+    orderedPairs' y ys zs
+    state <- get
+    when (and [x<y, Nothing == lookup x state]) modify ((x,y):)
+    
 
 -- Ex 13: compute all possible sums of elements from the given
 -- list. Use the list monad.
